@@ -28,6 +28,7 @@ ARGS="" #if not specified use default args set by me
 INP="" #if not specified don't run
 NAME="" #if not specified use filename -extension
 RES_C="" #if not specified use defaults set by me (based on task)
+HELP=false
 
 #TODO: Function to copy programs to the cluster
 #function init_auto_task()
@@ -35,19 +36,72 @@ RES_C="" #if not specified use defaults set by me (based on task)
 #}
 
 #Help text function
-#TODO: Write help text
-function print_help()
+#TODO: Write help text for basic, task, and tool help functions
+function basic_help()
 {
 cat >&2 << EOF
-Help text goes here at some point...
+basic_help() function
 EOF
 }
 
-#Flag Capture (based on my SlurmGraphing Config Script
+#Print task specific help
+function task_help()
+{
+	echo "$1 in task_help()"
+	
+	#case $1 in
+	#	align)
+	#	;;
+	#	cluster)
+	#	;;
+	#	abund)
+	#	;;
+	#	rare)
+	#	;;
+	#	sc)
+	#	;;
+	#	sub)
+	#	;;
+	#	rep)
+	#	;;
+	#	blast)
+	#	;;
+	#	tree)
+	#	;;
+	#	pcoa)
+	#	;;
+	#	chop)
+	#	;;
+	#	pipeline)
+	#	;;
+	#	get)
+	#	;;
+	#esac
+}
+
+function tool_help()
+{
+	echo "$1 in tool_help()"
+	
+	#case $1 in
+	#	muscle)
+	#	;;
+	#	muscle-mp)
+	#	;;
+	#	mothur)
+	#	;;
+	#	fungene)
+	#	;;
+	#	rdp)
+	#	;;
+	#esac
+}
+
+#Flag capture
 for i in "$@"
 do
 case $i in
-	hpc) #Run the task on the hpc cluster at USU
+	hpc)
 		LOC="hpc"
 		shift
 	;;
@@ -81,7 +135,6 @@ case $i in
 	;;
 	blast)
 		TASK="blast"
-		TOOL="blast"
 		shift
 	;;
 	tree)
@@ -106,7 +159,7 @@ case $i in
 		shift
 	;;
 	help)
-		TASK="help"
+		HELP=true
 	;;
 	muscle|muscle-mp)
 		TOOL="$i"
@@ -156,29 +209,61 @@ case $i in
 esac
 done
 
+#Var printout
+printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n" "Loc" "Task" "Tool" "Args" "Name" "C" "Help" "Input"
+printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$ARGS" "$NAME" "$RES_C" "$HELP" "$INP"
+
+#Check if help was requested
+if [[ $HELP == true ]]; then
+	if [[ ! -z "$TASK" ]]; then
+		task_help "$TASK"
+	fi
+	if [[ ! -z "$TOOL" ]]; then
+		tool_help "$TOOL"
+	fi
+	if [[ -z "$TASK" ]] && [[ -z "$TOOL" ]]; then
+		basic_help
+	fi
+	exit
+fi
+
 #Set defaults for un-specified flags
 if [[ -z "$LOC" ]]; then
 	LOC="local"
 fi
 
 if [[ -z "$TASK" ]]; then
-	TASK="help"
+	echo "Error: Need a task to perform"
+	# basic_help ??
+	exit
 fi
 
-if [[ -z "$TOOL" ]] && [[ "$TASK" != "help" ]]; then
-	TASK="tool-help"
+#If a task is specified but no tool, list possible tools for that task
+# sub, rep, blast, tree, pcoa, get, chop don't need a tool specified
+if [[ -z "$TOOL" ]] && [[ ! -z "$TASK" ]]; then
+	case $TASK in
+		align|cluster|abund|rare|sc|pipeline)
+			echo "Error: A tool must be specified for task '$TASK'"
+			task_help "$TASK"
+			exit
+		;;
+	esac
 fi
 
 #TODO: Check for required arguments, set cutoff if needed
-
 if [[ -z "$INP" ]]; then
-	echo "Error: No input files found... Quitting."
+	echo "Error: No input files or directories found"
 	exit
 fi
 
 if [[ -z "$NAME" ]]; then
 	#Take a guess at the name based on the input file
 	NAME=$(echo $INP | sed 's/\/.*\///g' | sed 's/\..*//g')
+	
+	#If that didn't work then set it to be unique
+	if [[ -z "$NAME" ]];then
+		NAME="$TASK-$TOOL-$(date +%s)"
+	fi
 fi
 
 if [[ -z "$RES_C" ]]; then
@@ -200,8 +285,8 @@ if [[ -z "$RES_C" ]]; then
 	esac
 fi
 
-#View the testing vars
-echo "$LOC - $TASK - $TOOL - $ARGS - $INP - $NAME - $RES_C"
+printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n" "Loc" "Task" "Tool" "Args" "Name" "C" "Help" "Input"
+printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$ARGS" "$NAME" "$RES_C" "$HELP" "$INP"
 
 #Notes
 #Execution Steps
