@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#TODO Flag Handling
-#TODO File Handling
-#TODO Tasks Execution
+#TODO Flag Handling (Mostly Done)
+#TODO File Handling (Mostly Done)
+#TODO Tasks Execution (Create sequences for tasks/tools
 #TODO Task: Align
 #TODO Task: Cluster
 #TODO Task: Abund (rarefaction, shannon_chao, abund stats)
@@ -20,7 +20,7 @@
 
 #TODO Pack up with mac programs, and extreme compression of linux execs for init
 
-#Testing variables
+#Flag variables
 LOC="" #default local
 TASK="" #if not specified default to print help text
 TOOL="" #if not specified print options for task
@@ -29,6 +29,16 @@ INP="" #if not specified don't run
 NAME="" #if not specified use filename -extension
 RES_C="" #if not specified use defaults set by me (based on task)
 HELP=false
+
+#Attempt to find where auto_task is located
+AT_DIR=$(locate auto_task.sh | sed 's/\/auto_task.sh//g')
+
+#System variables
+SCRIPTS="$AT_DIR"/resources/scripts
+PROGRAMS="$AT_DIR"/resources/programs
+JOB_FILES="$AT_DIR"/resources/job_files
+
+SEQUENCE=""
 
 #TODO: Function to copy programs to the cluster
 #function init_auto_task()
@@ -40,7 +50,7 @@ HELP=false
 function basic_help()
 {
 cat >&2 << EOF
-basic_help() function
+basic_help function
 EOF
 }
 
@@ -135,6 +145,7 @@ case $i in
 	;;
 	blast)
 		TASK="blast"
+		LOC="hpc"
 		shift
 	;;
 	tree)
@@ -150,7 +161,7 @@ case $i in
 		shift
 	;;
 	pipeline)
-		#TODO: Find way to list all the tools for each step
+		#TODO: Go through all args again to create a sequence of tasks
 		TASK="pipeline"
 		shift
 	;;
@@ -171,10 +182,12 @@ case $i in
 	;;
 	rdp|RDP)
 		TOOL="rdp"
+		LOC="hpc"
 		shift
 	;;
 	fungene)
 		TOOL="fungene"
+		LOC="hpc"
 		shift
 	;;
 	-c=*)
@@ -184,6 +197,19 @@ case $i in
 	init)
 		#TODO: Check if programs are on the cluster already
 		#if not copy/configure them for use
+		#Add an alias to make it easy to use
+		#Generate SSH keys between computer and cluster to make everything easier
+		#ssh-keygen -f ~/.ssh/auto_task_key -t rsa -N ''
+		#cat ~/.ssh/auto_task_key.pub | ssh $ANUM@login.rc.usu.edu "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+		#ssh-add ~/.ssh/auto_task_key
+		#Prompt for an A number and save it to the resources directory
+		#source that file when HPC goings on are about to happen
+		#'read -p "Enter A Number: " ANUM'
+		echo "alias auto_task='$AT_DIR/auto_task.sh'" >> ~/.bashrc
+		exit
+	;;
+	name=*)
+		NAME="${i#*=}"
 		shift
 	;;
 	*)
@@ -194,22 +220,32 @@ case $i in
 			else
 				INP="$INP;$i"
 			fi
+			shift
 			continue
 		fi
+		
 		#2 Check if it's an argument for a tool
-		# Args required for certain task/tool:
-		#   Task: subsample - num_seqs
-		#   Task: rep - min_size
-		#   Task: chop - num_bp, front/back
-		# Cutoff is required but can be set to a default value (90%)
-		#   Task: cluster, blast, pipeline - cutoff
-		#4 Get confused and halt errything
-		shift
+		case $i in
+			cutoff=*.*|seqs=*|otusize=*|hits=*|bps=*|pos=*|gene=*)
+				if [[ -z "$ARGS" ]]; then
+					ARGS="$i"
+				else
+					ARGS="$ARGS;$i"
+				fi
+				shift
+				continue
+			;;
+		esac
+		
+		#3 Get confused and halt errything
+		basic_help
+		exit
 	;;
 esac
 done
 
 #Var printout
+echo "Before assignment: "
 printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n" "Loc" "Task" "Tool" "Args" "Name" "C" "Help" "Input"
 printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$ARGS" "$NAME" "$RES_C" "$HELP" "$INP"
 
@@ -250,20 +286,14 @@ if [[ -z "$TOOL" ]] && [[ ! -z "$TASK" ]]; then
 	esac
 fi
 
-#TODO: Check for required arguments, set cutoff if needed
+#TODO: Argument Checking
 if [[ -z "$INP" ]]; then
 	echo "Error: No input files or directories found"
 	exit
 fi
 
 if [[ -z "$NAME" ]]; then
-	#Take a guess at the name based on the input file
-	NAME=$(echo $INP | sed 's/\/.*\///g' | sed 's/\..*//g')
-	
-	#If that didn't work then set it to be unique
-	if [[ -z "$NAME" ]];then
-		NAME="$TASK-$TOOL-$(date +%s)"
-	fi
+	NAME="$TASK-$TOOL-$(date +%s)"
 fi
 
 if [[ -z "$RES_C" ]]; then
@@ -285,8 +315,48 @@ if [[ -z "$RES_C" ]]; then
 	esac
 fi
 
+#Do task specific checking (i.e. required args and defaults that can be set)
+
+#Defaults that can be set: num_hits for blast, cutoff for cluster & pipeline
+#Defaults required: num_seqs for subsample, otusize for rep, bps and front/back for chop
+
+#If RDP or Fungene were selected check to make sure gene=* was filled in
+#  and if it has a valid value (list $PROGRAMS/fungene_pipeline/resources)
+if [[ $TOOL == "rdp" || $TOOL == "fungene" ]] && [[ $ARGS != *"gene"* ]]; then
+	echo "Error: $TASK requires a gene to be specified"
+	exit
+	
+fi
+
+if [[ $TOOL == "rdp" || $TOOL == "fungene" ]] && [[ $ARGS == *"gene"* ]]; then
+	split_arg=($(echo $ARGS | sed 's/;/ /g'))
+	for i in "${split_arg[@]}"; do
+		if [[ $i == *"gene"* ]]; then
+			sent_gene=$(echo $i | sed 's/gene=//g')
+		fi
+	done
+	
+	if [[ -z $sent_gene ]]; then
+		echo "Error: Couldn't find the specified gene"
+		exit
+	fi
+	
+	GENES=($(ls $PROGRAMS/fungene_pipeline/resources/ | sed 's/.*resources\/programs\/fungene_pipeline\/resources\///g'))
+	found=false
+	
+	case "${GENES[@]}" in *"$sent_gene"*) found=true ;; esac
+	if [[ $found == false ]]; then
+		echo "Error: $sent_gene is not a valid gene"
+		echo "Valid genes are:"
+		echo "${GENES[@]}"
+		exit
+	fi
+fi
+
+echo "After assignment: "
 printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n" "Loc" "Task" "Tool" "Args" "Name" "C" "Help" "Input"
 printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$ARGS" "$NAME" "$RES_C" "$HELP" "$INP"
+echo
 
 #Notes
 #Execution Steps
@@ -297,6 +367,131 @@ printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$AR
 #Check for input files
 #Check for resource request
 #Perform task
+#If not local zip the results
+
+
+#Location dependant
+
+#A Sequence of commands starts with creating a working directory, and results directory
+#Then picks up location, task, and tool specific commands
+if [[ $LOC == "hpc" ]]; then
+	source $AT_DIR/resources/ANUM.sh
+	#TASK: Run commands to create directory and scp input files over first
+	#  Sequence will only have task / tool commands
+	#TASK: Swap references to fremont over to usu cluster
+	ssh -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "
+	echo Creating auto_task-$NAME directory;
+	mkdir /projects/$ANUM/auto_task-$NAME;
+	echo Creating results directory;
+	mkdir /projects/$ANUM/auto_task-$NAME/results;
+	echo Transferring Input File;
+	"
+	
+	#TASK: Set this transfer up to do all files in $INP
+	for f in $(echo $INP | sed 's/;/\n/g'); do
+		scp -i ~/.ssh/auto_task_key -P 7389 $f mike@fremont.bluezone.usu.edu:/projects/$ANUM/auto_task-$NAME/
+		f_no_e=$(echo $f | sed 's/\..*//g')
+		case $TASK in
+			align)
+				case $TOOL in
+				muscle)
+					SEQUENCE+="cd /projects/$ANUM/auto_task-$NAME/;"
+					SEQUENCE+="echo '#!/bin/bash' > submit-$f_no_e.sh;
+								echo '#SBATCH --name=auto_task-$NAME' >> submit-$f_no_e.sh;
+								echo '/projects/$ANUM/auto_task/resources/programs/muscle -in $f -out results/"$f_no_e"_aligned.fasta' >> submit-$f_no_e.sh;
+								echo 'tar -cvf - results | gzip -c - > $NAME-results.tar' >> submit-$f_no_e.sh;"
+					SEQUENCE+="cat submit-$f_no_e.sh;"
+				;;
+				#muscle-mp)
+				#;;
+				#rdp)
+				#;;
+				#fungene)
+				#;;
+				esac
+			;;
+			#cluster)
+			#;;
+			#abund)
+			#;;
+			#rare)
+			#;;
+			#sc)
+			#;;
+			#sub)
+			#;;
+			#rep)
+			#;;
+			#blast)
+			#;;
+			#tree)
+			#;;
+			#pcoa)
+			#;;
+			#chop)
+			#;;
+			#pipeline)
+			#;;
+			#get)
+			#;;
+		esac
+	done
+	
+	#Finally the Sequence needs to zip results up if it's not running local
+else
+	SEQUENCE+=('mkdir $(pwd)/auto_task-$NAME')
+	SEQUENCE+=('cd $(pwd)/auto_task-$NAME')
+	
+	#The Sequence then needs to pick up the proper set of commands to run
+	case $TASK in
+		align)
+			case $TOOL in
+			muscle)
+				SEQUENCE+=("$PROGRAMS/muscle -in $INP -out $(echo $INP | sed 's/\..*//g')_aligned.fasta")
+			;;
+			#muscle-mp)
+			#;;
+			#rdp)
+			#;;
+			#fungene)
+			#;;
+			esac
+		;;
+		#cluster)
+		#;;
+		#abund)
+		#;;
+		#rare)
+		#;;
+		#sc)
+		#;;
+		#sub)
+		#;;
+		#rep)
+		#;;
+		#blast)
+		#;;
+		#tree)
+		#;;
+		#pcoa)
+		#;;
+		#chop)
+		#;;
+		#pipeline)
+		#;;
+		#get)
+		#;;
+	esac
+fi
+
+#Execute the sequence
+if [[ $LOC = "hpc" ]]; then
+	ssh -t -t -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "$SEQUENCE"
+else
+	eval $SEQUENCE
+fi
+
+echo $SEQUENCE
 
 #Zip up results for getting
 #./auto_task.sh get date_name_task /path/to/save/to :: will copy results archive to compy
