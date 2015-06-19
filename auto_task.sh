@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #TODO Flag Handling (Mostly Done)
-#TODO File Handling (Mostly Done)
-#TODO Tasks Execution (Create sequences for tasks/tools
-#TODO Task: Align
+#TODO File Handling (Mostly Done) Add more tool args?
+#TODO Tasks Execution Finish creating all the sequences
+#TODO Task: Align (Muscle done hpc & local)
 #TODO Task: Cluster
 #TODO Task: Abund (rarefaction, shannon_chao, abund stats)
 #TODO Task: Subsampling (run subsampler on given directory of fasta files)
@@ -40,71 +40,175 @@ JOB_FILES="$AT_DIR"/resources/job_files
 
 SEQUENCE=""
 
-#TODO: Function to copy programs to the cluster
-#function init_auto_task()
-#{
-#}
-
 #Help text function
-#TODO: Write help text for basic, task, and tool help functions
+#TODO: Write help text for basic, and tool help functions
 function basic_help()
 {
 cat >&2 << EOF
-basic_help function
+Possible tasks:	align, cluster, abund, rare, shannon_chao, subsample,
+				rep, blast, tree, pcoa, pipeline, get, chop
+
+Possible tools: muscle, muscle-mp, mothur, rdp, fungene
+
+Extra options:	cutoff, seqs, otusize, hits, bps, pos, gene, name, hpc
+
+Example commands:
+	auto_task align muscle input.fasta
+	auto_task cluster mothur input_aligned.fasta cutoff=0.1 hpc
+
+To see specific information on a task use help, i.e.
+	auto_task help align
+	auto_task help abund
+	auto_task help pipeline
 EOF
 }
 
 #Print task specific help
 function task_help()
 {
-	echo "$1 in task_help()"
-	
-	#case $1 in
-	#	align)
-	#	;;
-	#	cluster)
-	#	;;
-	#	abund)
-	#	;;
-	#	rare)
-	#	;;
-	#	sc)
-	#	;;
-	#	sub)
-	#	;;
-	#	rep)
-	#	;;
-	#	blast)
-	#	;;
-	#	tree)
-	#	;;
-	#	pcoa)
-	#	;;
-	#	chop)
-	#	;;
-	#	pipeline)
-	#	;;
-	#	get)
-	#	;;
-	#esac
-}
+	case $1 in
+		align)
+cat >&2 << EOF
+Task:	align
+Tools:	muscle, muscle-mp, rdp, fungene
+Input:	fasta files
+Output:	aligned fasta files
 
-function tool_help()
-{
-	echo "$1 in tool_help()"
-	
-	#case $1 in
-	#	muscle)
-	#	;;
-	#	muscle-mp)
-	#	;;
-	#	mothur)
-	#	;;
-	#	fungene)
-	#	;;
-	#	rdp)
-	#	;;
-	#esac
+i.e.	auto_task align muscle input.fasta
+		auto_task align rdp input.fasta gene=RRNA_16S_BACTERIA
+		auto_task align fungene input.fasta gene=nifh
+EOF
+		;;
+		cluster)
+cat >&2 << EOF
+Task:	cluster
+Tools:	mothur, rdp, fungene
+Input:	aligned fasta file
+Output:	names and clust files
+
+i.e.	auto_task cluster mothur aligned_input.fasta
+		auto_task cluster rdp aligned_input.fasta
+		auto_task cluster fungene aligned_input.fasta cutoff=0.05
+EOF
+		;;
+		abund)
+cat >&2 << EOF
+Task:	abund
+Tools:	none
+Input:	names or clust files
+Output: abundance csv
+
+i.e.	auto_task abund aligned_input_95.clust
+		auto_task abund aligned_input_97.names
+EOF
+		;;
+		rare)
+cat >&2 << EOF
+Task:	rare
+Tools:	mothur, rdp, fungene
+Input:	list or clust file
+Output:	text file
+
+i.e.	auto_task rare mothur aligned_input_95.list
+		auto_task rare rdp aligned_input_97.clust
+EOF
+		;;
+		sc)
+cat >&2 << EOF
+Task:	shannon_chao
+Tools:	rdp, fungene
+Input:	clust files
+Output:	text file
+
+i.e.	auto_task shannon_chao rdp aligned_input_95.clust
+		auto_task shannon_chao fungene aligned_input_95.clust
+EOF
+		;;
+		sub)
+cat >&2 << EOF
+Task:	subsample
+Tools:	none
+Input:	directory to subsample from, number of sequences to get
+Output:	fasta file containing samples from each file found
+
+i.e.	auto_task subsample /path/to/folder/ seqs=1000
+EOF
+		;;
+		rep)
+cat >&2 << EOF
+Task:	rep
+Tools:	none
+Input:	names file, minimum otu size
+Output:	fasta file with representative sequences proportional to OTU size
+
+i.e.	auto_task rep aligned_input_95.clust otusize=5
+EOF
+		;;
+		blast)
+cat >&2 << EOF
+Task:	blast
+Tools:	none
+Input:	query fasta file, max number of hits to keep
+Output:	fasta files for a cultured and uncultured search, and a combo of results and query
+
+i.e.	auto_task blast query_file.fasta
+		auto_task blast query_file.fasta hits=5
+EOF
+		;;
+		tree)
+cat >&2 << EOF
+Task:	tree
+Tools:	none
+Input:	aligned fasta file, nucleotide or protein specification
+Output:	tree file
+
+i.e.	auto_task tree nt aligned_input.fasta
+		auto_task tree pr aligned_input.fasta
+EOF
+		;;
+		pcoa)
+cat >&2 << EOF
+Task:	pcoa
+Tools:	none
+Input:	abundance csv
+Output:	tree, id_map.txt, and category_map.txt (for pcoa on unifrac)
+
+i.e.	auto_task pcoa aligned_input_95_abund.csv
+EOF
+		;;
+		chop)
+cat >&2 << EOF
+Task:	chop
+Tools:	none
+Input:	fasta file, number of base pairs to remove, removing from front or back
+Output:	fasta file with specified bases removed from all sequences
+
+i.e.	auto_task chop input.fasta bps=5 pos=front
+		auto_task chop input.fasta bps=10 pos=back
+EOF
+		;;
+		pipeline)
+cat >&2 << EOF
+Task:	pipeline
+Tools:	muscle, muscle-mp, mothur, rdp, fungene
+Input:	tasks, tools, and input files for tasks
+Output:	results from tasks specified
+
+i.e.	auto_task pipeline align muscle cluster mothur abund rare rdp shannon_chao rdp pcoa input.fasta
+		auto_task pipeline rare rdp shannon_chao rdp aligned_input_95.clust
+EOF
+		;;
+		get)
+cat >&2 << EOF
+Task:	get
+Tools:	none
+Input:	name of job to get
+Output: tar file of results from the job that has run on the HPC cluster
+
+i.e.	auto_task get auto_task-align-muscle-1434691617
+EOF
+		;;
+	esac
 }
 
 #Flag capture
@@ -161,8 +265,22 @@ case $i in
 		shift
 	;;
 	pipeline)
-		#TODO: Go through all args again to create a sequence of tasks
+		#TODO: Go through all args again to create a list of tasks and tools
 		TASK="pipeline"
+		for i in "$@"; do
+			TASKS=""
+			TOOLS=""
+			case $i in
+				align | cluster | abund | rare|rarefaction | sc|shannon_chao | subsample | rep | blast | tree | pcoa | chop)
+					TASKS+="$i;"
+					shift
+				;;
+				muscle | muscle-mp | mothur | rdp | fungene)
+					TOOLS+="$i;"
+					shift
+				;;
+			esac
+		done
 		shift
 	;;
 	get)
@@ -195,7 +313,14 @@ case $i in
 		shift
 	;;
 	init)
-		#TODO: Check if programs are on the cluster already
+		#TODO: Implement all the steps
+		# 1 Get A number and write it to file
+		# 2 Create SSH key
+		# 3 put key onto server
+		# 4 copy over the resource compression
+		# 5 extract it
+		# 6 add an alias to user bashrc
+		
 		#if not copy/configure them for use
 		#Add an alias to make it easy to use
 		#Generate SSH keys between computer and cluster to make everything easier
@@ -254,9 +379,6 @@ if [[ $HELP == true ]]; then
 	if [[ ! -z "$TASK" ]]; then
 		task_help "$TASK"
 	fi
-	if [[ ! -z "$TOOL" ]]; then
-		tool_help "$TOOL"
-	fi
 	if [[ -z "$TASK" ]] && [[ -z "$TOOL" ]]; then
 		basic_help
 	fi
@@ -270,7 +392,7 @@ fi
 
 if [[ -z "$TASK" ]]; then
 	echo "Error: Need a task to perform"
-	# basic_help ??
+	basic_help
 	exit
 fi
 
@@ -293,7 +415,11 @@ if [[ -z "$INP" ]]; then
 fi
 
 if [[ -z "$NAME" ]]; then
-	NAME="$TASK-$TOOL-$(date +%s)"
+	if [[ ! -z $TOOL ]]; then
+		NAME="$TASK-$TOOL-$(date +%s)"
+	else
+		NAME="$TASK-$(date +%s)"
+	fi
 fi
 
 if [[ -z "$RES_C" ]]; then
@@ -376,18 +502,17 @@ echo
 #Then picks up location, task, and tool specific commands
 if [[ $LOC == "hpc" ]]; then
 	source $AT_DIR/resources/ANUM.sh
-	#TASK: Run commands to create directory and scp input files over first
-	#  Sequence will only have task / tool commands
-	#TASK: Swap references to fremont over to usu cluster
+	
+	#TODO: Swap references to fremont over to usu cluster
 	ssh -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "
 	echo Creating auto_task-$NAME directory;
 	mkdir /projects/$ANUM/auto_task-$NAME;
 	echo Creating results directory;
 	mkdir /projects/$ANUM/auto_task-$NAME/results;
-	echo Transferring Input File;
+	echo Transferring Input File(s);
 	"
 	
-	#TASK: Set this transfer up to do all files in $INP
+	#Create commands for each input file that's to be run
 	for f in $(echo $INP | sed 's/;/\n/g'); do
 		scp -i ~/.ssh/auto_task_key -P 7389 $f mike@fremont.bluezone.usu.edu:/projects/$ANUM/auto_task-$NAME/
 		f_no_e=$(echo $f | sed 's/\..*//g')
@@ -439,71 +564,59 @@ if [[ $LOC == "hpc" ]]; then
 	
 	#Finally the Sequence needs to zip results up if it's not running local
 else
-	SEQUENCE+=('mkdir $(pwd)/auto_task-$NAME')
-	SEQUENCE+=('cd $(pwd)/auto_task-$NAME')
-	
+	SEQUENCE+="mkdir $(pwd)/results;"
+		
 	#The Sequence then needs to pick up the proper set of commands to run
-	case $TASK in
-		align)
-			case $TOOL in
-			muscle)
-				SEQUENCE+=("$PROGRAMS/muscle -in $INP -out $(echo $INP | sed 's/\..*//g')_aligned.fasta")
+	for f in $(echo $INP | sed 's/;/\n/g'); do
+		case $TASK in
+			align)
+				case $TOOL in
+				muscle)
+					SEQUENCE+="$PROGRAMS/muscle -quiet -maxiters 2 -in $f -out results/$(echo $f | sed 's/\..*//g')_aligned.fasta & "
+				;;
+				#muscle-mp)
+				#;;
+				#rdp)
+				#;;
+				#fungene)
+				#;;
+				esac
 			;;
-			#muscle-mp)
+			#cluster)
 			#;;
-			#rdp)
+			#abund)
 			#;;
-			#fungene)
+			#rare)
 			#;;
-			esac
-		;;
-		#cluster)
-		#;;
-		#abund)
-		#;;
-		#rare)
-		#;;
-		#sc)
-		#;;
-		#sub)
-		#;;
-		#rep)
-		#;;
-		#blast)
-		#;;
-		#tree)
-		#;;
-		#pcoa)
-		#;;
-		#chop)
-		#;;
-		#pipeline)
-		#;;
-		#get)
-		#;;
-	esac
+			#sc)
+			#;;
+			#sub)
+			#;;
+			#rep)
+			#;;
+			#blast)
+			#;;
+			#tree)
+			#;;
+			#pcoa)
+			#;;
+			#chop)
+			#;;
+			#pipeline)
+			#;;
+			#get)
+			#;;
+		esac
+	done
+	SEQUENCE+="wait;"
 fi
 
-#Execute the sequence
-if [[ $LOC = "hpc" ]]; then
-	ssh -t -t -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "$SEQUENCE"
-else
-	eval $SEQUENCE
-fi
+##Execute the sequence
+#if [[ $LOC = "hpc" ]]; then
+#	ssh -t -t -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "$SEQUENCE"
+#else
+#	eval $SEQUENCE
+#fi
 
 echo $SEQUENCE
 
-#Zip up results for getting
-#./auto_task.sh get date_name_task /path/to/save/to :: will copy results archive to compy
-
-# Running multiple commands over ssh connection
-#Login to cluster
-#read -p "A Number: " ANUM
-#ANUM=$(echo $ANUM | awk '{print toupper($0)}')
-#ssh -t -t -l $ANUM login.rc.usu.edu << EOF
-#Create work directory (task_date)
-#mkdir ~/"$(date +'%y-%m-%d')"_"$name"_"$task"
-#Create files needed for running job
-#Submit job
-#Logout
-#EOF
