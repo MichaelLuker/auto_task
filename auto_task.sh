@@ -1,27 +1,6 @@
 #!/bin/bash
 
-#TODO Flag Handling (Mostly Done)
-#TODO File Handling (Mostly Done) Add more tool args?
-#TODO Tasks Execution Finish creating all the sequences
-#TODO Task: Align (Muscle done hpc & local)
-#TODO Task: Cluster
-#TODO Task: Abund (rarefaction, shannon_chao, abund stats)
-#TODO Task: Subsampling (run subsampler on given directory of fasta files)
-#TODO Task: Rep (get rep sequences proportional to OTU size above cutoff
-#TODO Task: Blast (cultured, uncultured, combine res)
-#TODO Task: Tree
-#TODO Task: PCoA
-#TODO Task: Pipeline
-#TODO Task: Retrieve
-#TODO Script Refinement
-
-#TODO Move blast databases to location usable by others
-# check blast install folders?
-
-#TODO Pack up with mac programs, and extreme compression of linux execs for init
-
 #Flag variables
-LOC="" #default local
 TASK="" #if not specified default to print help text
 TOOL="" #if not specified print options for task
 ARGS="" #if not specified use default args set by me
@@ -31,30 +10,25 @@ RES_C="" #if not specified use defaults set by me (based on task)
 HELP=false
 
 #Attempt to find where auto_task is located
-AT_DIR=$(locate auto_task.sh | sed 's/\/auto_task.sh//g')
-
-#System variables
-SCRIPTS="$AT_DIR"/resources/scripts
-PROGRAMS="$AT_DIR"/resources/programs
-JOB_FILES="$AT_DIR"/resources/job_files
+AT_DIR=$(find ~ -name "auto_task.sh" | sed 's/\/auto_task.sh//g')
 
 SEQUENCE=""
 
-#Help text function
-#TODO: Write help text for basic, and tool help functions
+#Help text functions
 function basic_help()
 {
 cat >&2 << EOF
-Possible tasks:	align, cluster, abund, rare, shannon_chao, subsample,
-				rep, blast, tree, pcoa, pipeline, get, chop
+Possible tasks:	align, cluster, rare, shannon_chao,
+				blast, pipeline, get
 
-Possible tools: muscle, muscle-mp, mothur, rdp, fungene
+Possible tools: muscle, mothur, rdp, fungene, combo
 
-Extra options:	cutoff, seqs, otusize, hits, bps, pos, gene, name, hpc
+Extra options:	cutoff, hits, gene, name
 
 Example commands:
 	auto_task align muscle input.fasta
-	auto_task cluster mothur input_aligned.fasta cutoff=0.1 hpc
+	auto_task cluster mothur input_aligned.fasta
+	auto_task pipeline combo input.fasta
 
 To see specific information on a task use help, i.e.
 	auto_task help align
@@ -70,13 +44,13 @@ function task_help()
 		align)
 cat >&2 << EOF
 Task:	align
-Tools:	muscle, muscle-mp, rdp, fungene
+Tools:	muscle, rdp, fungene
 Input:	fasta files
 Output:	aligned fasta files
 
 i.e.	auto_task align muscle input.fasta
-		auto_task align rdp input.fasta gene=RRNA_16S_BACTERIA
-		auto_task align fungene input.fasta gene=nifh
+	auto_task align rdp input.fasta gene=RRNA_16S_BACTERIA
+	auto_task align fungene input.fasta gene=nifh
 EOF
 		;;
 		cluster)
@@ -87,30 +61,19 @@ Input:	aligned fasta file
 Output:	names and clust files
 
 i.e.	auto_task cluster mothur aligned_input.fasta
-		auto_task cluster rdp aligned_input.fasta
-		auto_task cluster fungene aligned_input.fasta cutoff=0.05
-EOF
-		;;
-		abund)
-cat >&2 << EOF
-Task:	abund
-Tools:	none
-Input:	names or clust files
-Output: abundance csv
-
-i.e.	auto_task abund aligned_input_95.clust
-		auto_task abund aligned_input_97.names
+	auto_task cluster rdp aligned_input.fasta
+	auto_task cluster fungene aligned_input.fasta cutoff=0.05
 EOF
 		;;
 		rare)
 cat >&2 << EOF
-Task:	rare
+Task:	rarefaction
 Tools:	mothur, rdp, fungene
 Input:	list or clust file
 Output:	text file
 
 i.e.	auto_task rare mothur aligned_input_95.list
-		auto_task rare rdp aligned_input_97.clust
+	auto_task rare rdp aligned_input_97.clust
 EOF
 		;;
 		sc)
@@ -121,27 +84,7 @@ Input:	clust files
 Output:	text file
 
 i.e.	auto_task shannon_chao rdp aligned_input_95.clust
-		auto_task shannon_chao fungene aligned_input_95.clust
-EOF
-		;;
-		sub)
-cat >&2 << EOF
-Task:	subsample
-Tools:	none
-Input:	directory to subsample from, number of sequences to get
-Output:	fasta file containing samples from each file found
-
-i.e.	auto_task subsample /path/to/folder/ seqs=1000
-EOF
-		;;
-		rep)
-cat >&2 << EOF
-Task:	rep
-Tools:	none
-Input:	names file, minimum otu size
-Output:	fasta file with representative sequences proportional to OTU size
-
-i.e.	auto_task rep aligned_input_95.clust otusize=5
+	auto_task shannon_chao fungene aligned_input_95.clust
 EOF
 		;;
 		blast)
@@ -152,50 +95,18 @@ Input:	query fasta file, max number of hits to keep
 Output:	fasta files for a cultured and uncultured search, and a combo of results and query
 
 i.e.	auto_task blast query_file.fasta
-		auto_task blast query_file.fasta hits=5
-EOF
-		;;
-		tree)
-cat >&2 << EOF
-Task:	tree
-Tools:	none
-Input:	aligned fasta file, nucleotide or protein specification
-Output:	tree file
-
-i.e.	auto_task tree nt aligned_input.fasta
-		auto_task tree pr aligned_input.fasta
-EOF
-		;;
-		pcoa)
-cat >&2 << EOF
-Task:	pcoa
-Tools:	none
-Input:	abundance csv
-Output:	tree, id_map.txt, and category_map.txt (for pcoa on unifrac)
-
-i.e.	auto_task pcoa aligned_input_95_abund.csv
-EOF
-		;;
-		chop)
-cat >&2 << EOF
-Task:	chop
-Tools:	none
-Input:	fasta file, number of base pairs to remove, removing from front or back
-Output:	fasta file with specified bases removed from all sequences
-
-i.e.	auto_task chop input.fasta bps=5 pos=front
-		auto_task chop input.fasta bps=10 pos=back
+	auto_task blast query_file.fasta hits=5
 EOF
 		;;
 		pipeline)
 cat >&2 << EOF
 Task:	pipeline
-Tools:	muscle, muscle-mp, mothur, rdp, fungene
-Input:	tasks, tools, and input files for tasks
-Output:	results from tasks specified
+Tools:	rdp, fungene, combo(muscle/mothur)
+Input:	unaligned fasta
+Output:	alignment, clustering, rarefaction, (shannon_chao if fungene/rdp)
 
-i.e.	auto_task pipeline align muscle cluster mothur abund rare rdp shannon_chao rdp pcoa input.fasta
-		auto_task pipeline rare rdp shannon_chao rdp aligned_input_95.clust
+i.e.	auto_task pipeline rdp input.fasta gene=16S_BACTERIAL
+	auto_task pipeline fungene input.fasta gene=nifh
 EOF
 		;;
 		get)
@@ -215,20 +126,8 @@ EOF
 for i in "$@"
 do
 case $i in
-	hpc)
-		LOC="hpc"
-		shift
-	;;
-	align)
-		TASK="align"
-		shift
-	;;
-	cluster)
-		TASK="cluster"
-		shift
-	;;
-	abund)
-		TASK="abund"
+	align|cluster)
+		TASK="$i"
 		shift
 	;;
 	rare|rarefaction)
@@ -239,73 +138,40 @@ case $i in
 		TASK="sc"
 		shift
 	;;
-	subsample)
-		TASK="sub"
-		shift
-	;;
-	rep)
-		TASK="rep"
-		shift
-	;;
 	blast)
 		TASK="blast"
-		LOC="hpc"
-		shift
-	;;
-	tree)
-		TASK="tree"
-		shift
-	;;
-	pcoa)
-		TASK="pcoa"
-		shift
-	;;
-	chop)
-		TASK="chop"
 		shift
 	;;
 	pipeline)
-		#TODO: Go through all args again to create a list of tasks and tools
 		TASK="pipeline"
-		for i in "$@"; do
-			TASKS=""
-			TOOLS=""
-			case $i in
-				align | cluster | abund | rare|rarefaction | sc|shannon_chao | subsample | rep | blast | tree | pcoa | chop)
-					TASKS+="$i;"
-					shift
-				;;
-				muscle | muscle-mp | mothur | rdp | fungene)
-					TOOLS+="$i;"
-					shift
-				;;
-			esac
-		done
+		TOOL="fungene"
 		shift
 	;;
 	get)
-		TASK="get"
-		shift
+		if [[ -e "$AT_DIR/resources/CONFIG.sh" ]]; then
+			source $AT_DIR/resources/CONFIG.sh
+		else
+			echo "Error: Cannot find $AT_DIR/resources/CONFIG.sh"
+			echo "  auto_task may not have been initialized"
+			exit
+		fi
+		
+		for i in "$@"; do
+			if [[ "$i" == *"auto_task"* ]]; then
+				scp -i ~/.ssh/auto_task_key $ANUM@$LOGIN:$OUT/$i/*.tgz .
+			fi
+		done
+		exit
 	;;
 	help)
 		HELP=true
 	;;
-	muscle|muscle-mp)
+	muscle|mothur|combo)
 		TOOL="$i"
 		shift
 	;;
-	mothur)
-		TOOL="mothur"
-		shift
-	;;
-	rdp|RDP)
-		TOOL="rdp"
-		LOC="hpc"
-		shift
-	;;
-	fungene)
-		TOOL="fungene"
-		LOC="hpc"
+	rdp|fungene)
+		TOOL="$i"
 		shift
 	;;
 	-c=*)
@@ -313,7 +179,6 @@ case $i in
 		shift
 	;;
 	init)
-		#TODO: Implement all the steps
 		# 1 Get A number and write it to file
 		# 2 Create SSH key
 		# 3 put key onto server
@@ -321,17 +186,69 @@ case $i in
 		# 5 extract it
 		# 6 add an alias to user bashrc
 		
-		#if not copy/configure them for use
-		#Add an alias to make it easy to use
-		#Generate SSH keys between computer and cluster to make everything easier
-		#ssh-keygen -f ~/.ssh/auto_task_key -t rsa -N ''
-		#cat ~/.ssh/auto_task_key.pub | ssh $ANUM@login.rc.usu.edu "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
-		#ssh-add ~/.ssh/auto_task_key
-		#Prompt for an A number and save it to the resources directory
-		#source that file when HPC goings on are about to happen
-		#'read -p "Enter A Number: " ANUM'
-		echo "alias auto_task='$AT_DIR/auto_task.sh'" >> ~/.bashrc
-		exit
+		if [[ ! -e "$AT_DIR/resources/CONFIG.sh" ]]; then
+			read -p "Enter your A number: " ANUM
+			ANUM=$(echo $ANUM | awk '{print toupper($0)}')
+			
+			read -p "Enter the hostname to log in to (i.e. login.rc.usu.edu): " LOGIN
+			
+			read -p "Enter the directory to use on cluster for auto_task i.e. /projects/A01515202 or leave blank to use home directory: " DIR
+			
+			if [[ -z $DIR ]]; then
+				DIR=/home/"$ANUM"
+				RES=/home/"$ANUM"/resources
+				OUT=$DIR
+			fi
+			
+			echo "Generating keys for Server"
+			ssh-keygen -f ~/.ssh/auto_task_key -t rsa -N ''
+			cat ~/.ssh/auto_task_key.pub | ssh $ANUM@$LOGIN "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+			ssh-add ~/.ssh/auto_task_key
+			
+			echo "Writing options to file"
+			echo '#!/bin/bash' > $AT_DIR/resources/CONFIG.sh
+			echo "ANUM=$ANUM" >> $AT_DIR/resources/CONFIG.sh
+			EMAIL=$(ssh -i ~/.ssh/auto_task_key $ANUM@$LOGIN "/rc/tools/utils/lib/useremaillookup.sh $ANUM | cut -d '<' -f 2 | sed 's/>//g'")
+			echo "EMAIL=$EMAIL" >> $AT_DIR/resources/CONFIG.sh
+			echo "LOGIN=$LOGIN" >> $AT_DIR/resources/CONFIG.sh
+			echo "RES=$RES" >> $AT_DIR/resources/CONFIG.sh
+			echo "OUT=$OUT" >> $AT_DIR/resources/CONFIG.sh
+			
+			echo "Copying programs to HPC cluster: /projects/$ANUM/resources"
+			scp -i ~/.ssh/auto_task_key $AT_DIR/res.tar.xz $ANUM@$LOGIN:$DIR
+			ssh -i ~/.ssh/auto_task_key $ANUM@$LOGIN "cd $DIR; tar -xvf res.tar.xz"
+			
+			echo "Configuring Fungene and RDP locations: /projects/$ANUM/resources/programs/fungene_pipeline/config.ini"
+			ssh -i ~/.ssh/auto_task_key $ANUM@$LOGIN "
+			echo '[pipeline]' > $RES/programs/fungene_pipeline/config.ini;
+			echo 'resource_dir = $RES/programs/fungene_pipeline/resources' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'blastx_db = #unused' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'blastn_db = #unused' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'distribute_jobs = false' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'cmalign_cmd = $RES/programs/infernal-1.1.1/binaries/cmalign' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'hmmalign_cmd = $RES/programs/hmmer-3/bin/hmmalign' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'blast_cmd = $RES/programs/blast-2.2.26/bin/blastall' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'formatdb_cmd = $RES/programs/blast-2.2.26/bin/formatdb' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'parse_error_analysis_cmd = $RES/programs/fungene_pipeline/parseErrorAnalysis.py' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'usearch_cmd = $RES/programs/usearch' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'gridware_env_path=/usr/bin:/usr/sbin:/Software/bin #unused' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'process_class_jar = $RES/programs/RDPTools/SeqFilters.jar' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'cluster_jar = $RES/programs/RDPTools/Clustering.jar' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'framebot_jar = $RES/programs/RDPTools/FrameBot.jar' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'alignment_tools_jar = $RES/programs/RDPTools/AlignmentTools.jar' >> $RES/programs/fungene_pipeline/config.ini;
+			echo 'abundance_jar = $RES/programs/RDPTools/AbundanceStats.jar' >> $RES/programs/fungene_pipeline/config.ini;
+			"
+			
+			echo "Writing auto_task alias"
+			echo "alias auto_task='$AT_DIR/auto_task.sh'" >> ~/.bashrc
+			
+			echo "Initialization complete"
+			echo "Close and re-open this terminal, or start a new terminal to use alias."
+			exit
+		else
+			echo "Error: $AT_DIR/resources/CONFIG.sh already exists, init has been run before."
+			exit
+		fi
 	;;
 	name=*)
 		NAME="${i#*=}"
@@ -351,7 +268,7 @@ case $i in
 		
 		#2 Check if it's an argument for a tool
 		case $i in
-			cutoff=*.*|seqs=*|otusize=*|hits=*|bps=*|pos=*|gene=*)
+			cutoff=*.*|hits=*|gene=*|tdb=*|dbp=*)
 				if [[ -z "$ARGS" ]]; then
 					ARGS="$i"
 				else
@@ -369,25 +286,28 @@ case $i in
 esac
 done
 
-#Var printout
-echo "Before assignment: "
-printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n" "Loc" "Task" "Tool" "Args" "Name" "C" "Help" "Input"
-printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$ARGS" "$NAME" "$RES_C" "$HELP" "$INP"
+if [[ -e "$AT_DIR/resources/CONFIG.sh" ]]; then
+	source $AT_DIR/resources/CONFIG.sh
+else
+	echo "Error: Cannot find $AT_DIR/resources/CONFIG.sh"
+	echo "  auto_task may not have been initialized"
+	exit
+fi
 
 #Check if help was requested
 if [[ $HELP == true ]]; then
 	if [[ ! -z "$TASK" ]]; then
 		task_help "$TASK"
-	fi
-	if [[ -z "$TASK" ]] && [[ -z "$TOOL" ]]; then
+	else
 		basic_help
+		
 	fi
 	exit
 fi
 
 #Set defaults for un-specified flags
 if [[ -z "$LOC" ]]; then
-	LOC="local"
+	LOC="hpc"
 fi
 
 if [[ -z "$TASK" ]]; then
@@ -400,7 +320,7 @@ fi
 # sub, rep, blast, tree, pcoa, get, chop don't need a tool specified
 if [[ -z "$TOOL" ]] && [[ ! -z "$TASK" ]]; then
 	case $TASK in
-		align|cluster|abund|rare|sc|pipeline)
+		align|cluster|rare|sc|pipeline)
 			echo "Error: A tool must be specified for task '$TASK'"
 			task_help "$TASK"
 			exit
@@ -408,7 +328,6 @@ if [[ -z "$TOOL" ]] && [[ ! -z "$TASK" ]]; then
 	esac
 fi
 
-#TODO: Argument Checking
 if [[ -z "$INP" ]]; then
 	echo "Error: No input files or directories found"
 	exit
@@ -423,21 +342,21 @@ if [[ -z "$NAME" ]]; then
 fi
 
 if [[ -z "$RES_C" ]]; then
+	case $TASK in
+		align|cluster|rare|sc|blast|pipeline)
+			RES_C="4"
+		;;
+		get)
+			RES_C="1"
+	esac
+	
 	case $TOOL in
 		muscle|fungene)
 			RES_C="1"
 		;;
-		muscle-mp|mothur|rdp|RDP)
+		mothur|rdp|combo)
 			RES_C="4"
 		;;
-	esac
-	
-	case $TASK in
-		rare|sc|blast|pipeline)
-			RES_C="4"
-		;;
-		abund|subsample|rep|tree|pcoa|get)
-			RES_C="1"
 	esac
 fi
 
@@ -449,7 +368,10 @@ fi
 #If RDP or Fungene were selected check to make sure gene=* was filled in
 #  and if it has a valid value (list $PROGRAMS/fungene_pipeline/resources)
 if [[ $TOOL == "rdp" || $TOOL == "fungene" ]] && [[ $ARGS != *"gene"* ]]; then
-	echo "Error: $TASK requires a gene to be specified"
+	echo "Error: $TASK with $TOOL requires a gene to be specified"
+	echo "Possible genes are:"
+	GENES=($(ls $AT_DIR/resources/genes | sed 's/.*resources\/genes\///g'))
+	echo "${GENES[@]}"
 	exit
 	
 fi
@@ -457,8 +379,10 @@ fi
 if [[ $TOOL == "rdp" || $TOOL == "fungene" ]] && [[ $ARGS == *"gene"* ]]; then
 	split_arg=($(echo $ARGS | sed 's/;/ /g'))
 	for i in "${split_arg[@]}"; do
-		if [[ $i == *"gene"* ]]; then
-			sent_gene=$(echo $i | sed 's/gene=//g')
+		if [[ $i == *"gene="* ]]; then
+			sent_gene=$(echo $i | sed 's/.*gene=//g')
+		elif [[ $i == *"cutoff="* ]]; then
+			cutoff=$(echo $i | sed 's/.*cutoff=//g')
 		fi
 	done
 	
@@ -467,7 +391,7 @@ if [[ $TOOL == "rdp" || $TOOL == "fungene" ]] && [[ $ARGS == *"gene"* ]]; then
 		exit
 	fi
 	
-	GENES=($(ls $PROGRAMS/fungene_pipeline/resources/ | sed 's/.*resources\/programs\/fungene_pipeline\/resources\///g'))
+	GENES=($(ls $AT_DIR/resources/genes | sed 's/.*resources\/genes\///g'))
 	found=false
 	
 	case "${GENES[@]}" in *"$sent_gene"*) found=true ;; esac
@@ -479,144 +403,351 @@ if [[ $TOOL == "rdp" || $TOOL == "fungene" ]] && [[ $ARGS == *"gene"* ]]; then
 	fi
 fi
 
-echo "After assignment: "
-printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n" "Loc" "Task" "Tool" "Args" "Name" "C" "Help" "Input"
-printf "%-5s %-8s %-9s %-12s %-13s %-2s %-5s %s\n\n" "$LOC" "$TASK" "$TOOL" "$ARGS" "$NAME" "$RES_C" "$HELP" "$INP"
-echo
+if [[ $TASK == "blast" ]] && [[ $ARGS == *"hits"* ]]; then
+	split_arg=($(echo $ARGS | sed 's/;/ /g'))
+	for i in "${split_arg[@]}"; do
+		if [[ $i == *"hits"* ]]; then
+			hits=$(echo $i | sed 's/.*hits=//g')
+		fi
+	done
+fi
+
+if [[ $TOOL == "mothur" ]] || [[ $TOOL == "combo" ]] && [[ $ARGS == *"cutoff"* ]]; then
+	split_arg=($(echo $ARGS | sed 's/;/ /g'))
+	for i in "${split_arg[@]}"; do
+		if [[ $i == *"cutoff"* ]]; then
+			cutoff=$(echo $i | sed 's/.*cutoff=//g')
+		fi
+	done
+fi
+
+if [[ -z "$hits" ]]; then hits=5; fi
+if [[ -z "$cutoff" ]]; then cutoff=0.1; fi
+
+if [[ $TASK == "blast" ]] && [[ $ARGS == *"tdb"* ]]; then
+	split_arg=($(echo $ARGS | sed 's/;/ /g'))
+	for i in "${split_arg[@]}"; do
+		if [[ $i == *"tdb"* ]]; then
+			tdb=$(echo $i | sed 's/.*tdb=//g')
+		fi
+	done
+fi
+
+if [[ $TASK == "blast" ]] && [[ $ARGS == *"dbp"* ]]; then
+	split_arg=($(echo $ARGS | sed 's/;/ /g'))
+	for i in "${split_arg[@]}"; do
+		if [[ $i == *"cutoff"* ]]; then
+			dbp=$(echo $i | sed 's/.*dbp=//g')
+		fi
+	done
+fi
+
+
+if [[ -z "$tdb" ]]; then tdb="nt"; fi
+
+if [[ $tdb == "nt" ]]; then blast="blastn";
+elif [[ $tdb == "nr" ]]; then blast="blastp"; fi
+
+if [[ -z "$dbp" ]]; then dbp="/projects/A01515202/blast_dbs/$tdb"; fi
 
 #Notes
 #Execution Steps
-#Check for location
-#Check for task
-#Check for tool
-#Check for arguments
-#Check for input files
-#Check for resource request
-#Perform task
-#If not local zip the results
-
-
-#Location dependant
+#  Check for task
+#  Check for tool
+#  Check for arguments
+#  Check for input files
+#  Check for resource request
+#  Perform task
+#  Zip the results
 
 #A Sequence of commands starts with creating a working directory, and results directory
 #Then picks up location, task, and tool specific commands
-if [[ $LOC == "hpc" ]]; then
-	source $AT_DIR/resources/ANUM.sh
-	
-	#TODO: Swap references to fremont over to usu cluster
-	ssh -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "
-	echo Creating auto_task-$NAME directory;
-	mkdir /projects/$ANUM/auto_task-$NAME;
-	echo Creating results directory;
-	mkdir /projects/$ANUM/auto_task-$NAME/results;
-	echo Transferring Input File(s);
-	"
-	
-	#Create commands for each input file that's to be run
-	for f in $(echo $INP | sed 's/;/\n/g'); do
-		scp -i ~/.ssh/auto_task_key -P 7389 $f mike@fremont.bluezone.usu.edu:/projects/$ANUM/auto_task-$NAME/
-		f_no_e=$(echo $f | sed 's/\..*//g')
-		case $TASK in
-			align)
-				case $TOOL in
-				muscle)
-					SEQUENCE+="cd /projects/$ANUM/auto_task-$NAME/;"
-					SEQUENCE+="echo '#!/bin/bash' > submit-$f_no_e.sh;
-								echo '#SBATCH --name=auto_task-$NAME' >> submit-$f_no_e.sh;
-								echo '/projects/$ANUM/auto_task/resources/programs/muscle -in $f -out results/"$f_no_e"_aligned.fasta' >> submit-$f_no_e.sh;
-								echo 'tar -cvf - results | gzip -c - > $NAME-results.tar' >> submit-$f_no_e.sh;"
-					SEQUENCE+="cat submit-$f_no_e.sh;"
-				;;
-				#muscle-mp)
-				#;;
-				#rdp)
-				#;;
-				#fungene)
-				#;;
-				esac
+source $AT_DIR/resources/CONFIG.sh
+
+ssh -i ~/.ssh/auto_task_key $ANUM@$LOGIN "
+echo Creating auto_task-$NAME directory;
+mkdir $OUT/auto_task-$NAME;
+echo 'Transferring Input File(s)';
+"
+
+#Create commands for each input file that's to be run
+for f in $(echo $INP | sed 's/;/\n/g'); do
+	scp -i ~/.ssh/auto_task_key $f $ANUM@$LOGIN:$OUT/auto_task-$NAME/
+	f_no_e=$(echo $f | sed 's/\..*//g')
+	case $TASK in
+		align)
+			case $TOOL in
+			muscle)
+				SEQUENCE+="cd $OUT/auto_task-$NAME/;
+				mkdir $f_no_e-results;"
+				SEQUENCE+="echo 'Writing submission file';
+				echo '#!/bin/bash' > submit-$f_no_e.sh;
+				echo '$RES/programs/muscle -in $f -out $f_no_e-results/$f_no_e-aligned.fasta' >> submit-$f_no_e.sh;
+				echo 'tar -cvf - $f_no_e-results | gzip -c - > $f_no_e-results.tgz' >> submit-$f_no_e.sh;
+				"
+				SEQUENCE+="echo 'Submitting job';
+				sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
 			;;
-			#cluster)
-			#;;
-			#abund)
-			#;;
-			#rare)
-			#;;
-			#sc)
-			#;;
-			#sub)
-			#;;
-			#rep)
-			#;;
-			#blast)
-			#;;
-			#tree)
-			#;;
-			#pcoa)
-			#;;
-			#chop)
-			#;;
-			#pipeline)
-			#;;
-			#get)
-			#;;
-		esac
-	done
-	
-	#Finally the Sequence needs to zip results up if it's not running local
-else
-	SEQUENCE+="mkdir $(pwd)/results;"
-		
-	#The Sequence then needs to pick up the proper set of commands to run
-	for f in $(echo $INP | sed 's/;/\n/g'); do
-		case $TASK in
-			align)
-				case $TOOL in
-				muscle)
-					SEQUENCE+="$PROGRAMS/muscle -quiet -maxiters 2 -in $f -out results/$(echo $f | sed 's/\..*//g')_aligned.fasta & "
-				;;
-				#muscle-mp)
-				#;;
-				#rdp)
-				#;;
-				#fungene)
-				#;;
-				esac
+			fungene|rdp)
+				#1 Write the commands and options text files
+				SEQUENCE+="cd $OUT/auto_task-$NAME/;
+				echo 'Writing job files';
+				echo -e 'dereplicate\tunaligned' >> commands-$f_no_e.txt;
+				echo 'align' >> commands-$f_no_e.txt;
+				echo -e 'explode_mapping\texpanded_mappings' >> commands-$f_no_e.txt;"
+				
+				SEQUENCE+="echo $sent_gene >> options-$f_no_e.txt;
+				echo $OUT/auto_task-$NAME >> options-$f_no_e.txt;
+				echo $OUT/auto_task-$NAME/$f_no_e-results >> options-$f_no_e.txt;
+				echo $EMAIL >> options-$f_no_e.txt;
+				echo $OUT/auto_task-$NAME/status-$f_no_e.txt >> options-$f_no_e.txt;
+				echo $OUT/auto_task-$NAME/$f_no_e-results.tgz >> options-$f_no_e.txt;
+				echo $OUT/auto_task-$NAME/mail_message.txt >> options-$f_no_e.txt;
+				"
+				
+				#2 Write the submission script
+				SEQUENCE+="echo '#!/bin/bash' >> submit-$f_no_e.sh;
+				echo '. /rc/tools/utils/dkinit' >> submit-$f_no_e.sh;
+				echo 'use Python-EPD' >> submit-$f_no_e.sh;
+				"
+				
+				SEQUENCE+="echo python $RES/programs/fungene_pipeline/fgp_wrapper.py options-$f_no_e.txt commands-$f_no_e.txt $f >> submit-$f_no_e.sh;"
+				
+				#3 submit the script to run
+				SEQUENCE+="echo 'Submitting job';
+				sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
 			;;
-			#cluster)
-			#;;
-			#abund)
-			#;;
-			#rare)
-			#;;
-			#sc)
-			#;;
-			#sub)
-			#;;
-			#rep)
-			#;;
-			#blast)
-			#;;
-			#tree)
-			#;;
-			#pcoa)
-			#;;
-			#chop)
-			#;;
-			#pipeline)
-			#;;
-			#get)
-			#;;
-		esac
-	done
-	SEQUENCE+="wait;"
-fi
+			esac
+		;;
+		cluster)
+			case $TOOL in
+				fungene|rdp)
+					#1 Write the commands and options text files
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					echo 'Writing job files';
+					echo -e 'dereplicate\taligned' >> commands-$f_no_e.txt;
+					echo -e 'distance\t$cutoff\t0.01\t#=GC_RF' >> commands-$f_no_e.txt;
+					echo -e 'cluster\tcomplete\t0.01' >> commands-$f_no_e.txt;"
+					
+					SEQUENCE+="echo $sent_gene >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results >> options-$f_no_e.txt;
+					echo $EMAIL >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/status-$f_no_e.txt >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results.tgz >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/mail_message.txt >> options-$f_no_e.txt;
+					"
+					
+					#2 Write the submission script
+					SEQUENCE+="echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo '. /rc/tools/utils/dkinit' >> submit-$f_no_e.sh;
+					echo 'use Python-EPD' >> submit-$f_no_e.sh;
+					"
+					
+					SEQUENCE+="echo python $RES/programs/fungene_pipeline/fgp_wrapper.py options-$f_no_e.txt commands-$f_no_e.txt $f >> submit-$f_no_e.sh;"
+					
+					#3 submit the script to run
+					SEQUENCE+="echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+				mothur)
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					mkdir $f_no_e-clustering;
+					echo 'Writing job files';
+					echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo -e 'cd $f_no_e-clustering' >> submit-$f_no_e.sh;
+					echo -e 'cp ../$f .' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#dist.seqs(fasta=$f, output=lt, processors=$RES_C)\"' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#cluster.classic(phylip=$f_no_e.phylip.dist, cutoff=$cutoff)\"' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#get.oturep(phylip=$f_no_e.phylip.dist, list=$f_no_e.phylip.an.list, cutoff=$cutoff)\"' >> submit-$f_no_e.sh;
+					echo -e 'mv $f_no_e.phylip.dist ../' >> submit-$f_no_e.sh;
+					echo -e 'cd ..' >> submit-$f_no_e.sh;
+					echo -e 'tar -cvf - $f_no_e-clustering | gzip -c - > $f_no_e-results.tgz' >> submit-$f_no_e.sh;
+					echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+			esac
+		;;
+		rare)
+			case $TOOL in
+				fungene|rdp)
+					#1 Write the commands and options text files
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					echo 'Writing job files';
+					echo -e 'rarefaction' >> commands-$f_no_e.txt;"
+					
+					SEQUENCE+="echo $sent_gene >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results >> options-$f_no_e.txt;
+					echo $EMAIL >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/status-$f_no_e.txt >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results.tgz >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/mail_message.txt >> options-$f_no_e.txt;
+					"
+					
+					#2 Write the submission script
+					SEQUENCE+="echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo '. /rc/tools/utils/dkinit' >> submit-$f_no_e.sh;
+					echo 'use Python-EPD' >> submit-$f_no_e.sh;
+					"
+					
+					SEQUENCE+="echo python $RES/programs/fungene_pipeline/fgp_wrapper.py options-$f_no_e.txt commands-$f_no_e.txt $f >> submit-$f_no_e.sh;"
+					
+					#3 submit the script to run
+					SEQUENCE+="echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+				mothur)
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					mkdir $f_no_e-rarefaction;
+					echo 'Writing job files';
+					echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo -e 'cd $f_no_e-rarefaction' >> submit-$f_no_e.sh;
+					echo -e 'cp ../$f .' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#rarefaction.single(list=$f, freq=2, processors=$RES_C)\"' >> submit-$f_no_e.sh;
+					echo -e 'cd ..' >> submit-$f_no_e.sh;
+					echo -e 'tar -cvf - $f_no_e-rarefaction | gzip -c - > $f_no_e-results.tgz' >> submit-$f_no_e.sh;
+					echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+			esac
+		;;
+		sc)
+			case $TOOL in
+				fungene|rdp)
+					#1 Write the commands and options text files
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					echo 'Writing job files';
+					echo -e 'shannon_chao' >> commands-$f_no_e.txt;"
+					
+					SEQUENCE+="echo $sent_gene >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results >> options-$f_no_e.txt;
+					echo $EMAIL >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/status-$f_no_e.txt >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results.tgz >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/mail_message.txt >> options-$f_no_e.txt;
+					"
+					
+					#2 Write the submission script
+					SEQUENCE+="echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo '. /rc/tools/utils/dkinit' >> submit-$f_no_e.sh;
+					echo 'use Python-EPD' >> submit-$f_no_e.sh;
+					"
+					
+					SEQUENCE+="echo python $RES/programs/fungene_pipeline/fgp_wrapper.py options-$f_no_e.txt commands-$f_no_e.txt $f >> submit-$f_no_e.sh;"
+					
+					#3 submit the script to run
+					SEQUENCE+="echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+			esac
+		;;
+		blast)
+			#1 create directories for cultured & uncultured results
+			SEQUENCE+="echo Creating directories;
+			cd $OUT/auto_task-$NAME/;
+			mkdir $f_no_e-results;
+			mkdir $f_no_e-results/cultured;
+			mkdir $f_no_e-results/uncultured;
+			mkdir $f_no_e-results/combined;
+			"
+			
+			#2 run blast searches on both (blast_search.sh, filter.py, submit.sh)
+			#3 combine results
+			#4 compress results (cultured, uncultured, combined)
+			SEQUENCE+="echo Writing submission script;
+			echo '#!/bin/bash' >> submit-$f_no_e.sh;
+			echo '. /rc/tools/utils/dkinit' >> submit-$f_no_e.sh;
+			echo 'use BLAST' >> submit-$f_no_e.sh;
+			echo 'export BLASTDB=$dbp' >> submit-$f_no_e.sh;
+			echo '$blast -query $f -db $tdb -negative_gilist /projects/$ANUM/resources/job_files/uncultured_gis.txt -num_alignments $hits -outfmt \"6 qseqid sgi sstart send length\" -num_threads $RES_C > $f_no_e-results/cultured/blast_output.txt' >> submit-$f_no_e.sh;
+			echo '$blast -query $f -db $tdb -num_alignments $hits -outfmt \"6 qseqid sgi sstart send length\" -num_threads $RES_C > $f_no_e-results/uncultured/blast_output.txt' >> submit-$f_no_e.sh;
+			echo 'python $RES/scripts/blast_filter.py $f_no_e-results/cultured/blast_output.txt > $f_no_e-results/cultured/filtered_output.txt' >> submit-$f_no_e.sh;
+			echo 'python $RES/scripts/blast_filter.py $f_no_e-results/uncultured/blast_output.txt > $f_no_e-results/uncultured/filtered_output.txt' >> submit-$f_no_e.sh;
+			echo 'cat $f_no_e-results/cultured/filtered_output.txt $f_no_e-results/uncultured/filtered_output.txt >> $f_no_e-results/combined/combined_output.txt' >> submit-$f_no_e.sh;
+			echo 'python $RES/scripts/blast_filter.py $f_no_e-results/combined/combined_output.txt > $f_no_e-results/combined/filtered_combined_output.txt' >> submit-$f_no_e.sh;
+			echo '$RES/scripts/blast_get_fasta.sh $f_no_e-results/cultured/filtered_output.txt $f_no_e-results/cultured/cultured.fasta $tdb' >> submit-$f_no_e.sh;
+			echo '$RES/scripts/blast_get_fasta.sh $f_no_e-results/uncultured/filtered_output.txt $f_no_e-results/uncultured/uncultured.fasta $tdb' >> submit-$f_no_e.sh;
+			echo '$RES/scripts/blast_get_fasta.sh $f_no_e-results/combined/filtered_combined_output.txt $f_no_e-results/combined/combined.fasta $tdb' >> submit-$f_no_e.sh;
+			echo 'tar -cvf - $f_no_e-results | gzip -c - > $f_no_e-results.tgz' >> submit-$f_no_e.sh;
+			"
+			
+			SEQUENCE+="echo Submitting job;
+			sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+		;;
+		pipeline)
+			case $TOOL in
+				fungene|rdp)
+					#1 Write the commands and options text files
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					echo 'Writing job files';
+					echo -e 'dereplicate\tunaligned' >> commands-$f_no_e.txt;
+					echo -e 'align' >> commands-$f_no_e.txt;
+					echo -e 'distance\t$cutoff\t0.01\t#=GC_RF' >> commands-$f_no_e.txt;
+					echo -e 'cluster\tcomplete\t0.01' >> commands-$f_no_e.txt;
+					echo -e 'rarefaction' >> commands-$f_no_e.txt;
+					echo -e 'shannon_chao' >> commands-$f_no_e.txt
+					echo -e 'explode_mapping\texpanded_mappings' >> commands-$f_no_e.txt;"
+					
+					SEQUENCE+="echo $sent_gene >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results >> options-$f_no_e.txt;
+					echo $EMAIL >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/status-$f_no_e.txt >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/$f_no_e-results.tgz >> options-$f_no_e.txt;
+					echo $OUT/auto_task-$NAME/mail_message.txt >> options-$f_no_e.txt;
+					"
+					
+					#2 Write the submission script
+					SEQUENCE+="echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo '. /rc/tools/utils/dkinit' >> submit-$f_no_e.sh;
+					echo 'use Python-EPD' >> submit-$f_no_e.sh;
+					"
+					
+					SEQUENCE+="echo python $RES/programs/fungene_pipeline/fgp_wrapper.py options-$f_no_e.txt commands-$f_no_e.txt $f >> submit-$f_no_e.sh;"
+					
+					#3 submit the script to run
+					SEQUENCE+="echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+				combo)
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					mkdir $f_no_e-results;"
+					SEQUENCE+="echo 'Writing submission file';
+					echo '#!/bin/bash' > submit-$f_no_e.sh;
+					echo 'mkdir $f_no_e-results/alignment' >> submit-$f_no_e.sh;
+					echo '$RES/programs/muscle -in $f -out $f_no_e-results/alignment/$f_no_e-aligned.fasta' >> submit-$f_no_e.sh;
+					"
+					SEQUENCE+="cd $OUT/auto_task-$NAME/;
+					mkdir $f_no_e-results/clustering;
+					echo 'Writing job files';
+					echo '#!/bin/bash' >> submit-$f_no_e.sh;
+					echo -e 'cd $f_no_e-results/clustering' >> submit-$f_no_e.sh;
+					echo -e 'cp ../alignment/$f_no_e-aligned.fasta .' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#dist.seqs(fasta=$f_no_e-aligned.fasta, output=lt, processors=$RES_C)\"' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#cluster.classic(phylip=$f_no_e-aligned.phylip.dist, cutoff=$cutoff)\"' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#get.oturep(phylip=$f_no_e-aligned.phylip.dist, list=$f_no_e-aligned.phylip.an.list, cutoff=$cutoff)\"' >> submit-$f_no_e.sh;
+					echo -e '$RES/programs/mothur/mothur \"#rarefaction.single(list=$f_no_e-aligned.phylip.an.list, freq=2, processors=$RES_C)\"' >> submit-$f_no_e.sh;
+					echo -e 'mkdir ../rarefaction && mv $f_no_e-aligned.phylip.an.rarefaction ../rarefaction' >> submit-$f_no_e.sh;
+					echo -e 'mv $f_no_e-aligned.phylip.dist ../../' >> submit-$f_no_e.sh;
+					echo -e 'cd ../../' >> submit-$f_no_e.sh;
+					echo -e 'tar -cvf - $f_no_e-results | gzip -c - > $f_no_e-results.tgz' >> submit-$f_no_e.sh;
+					echo 'Submitting job';
+					sbatch --cpus-per-task=$RES_C --job-name=auto_task-$f_no_e --mail-type=END --mail-user=$EMAIL submit-$f_no_e.sh;"
+				;;
+			esac
+		;;
+	esac
+done
 
-##Execute the sequence
-#if [[ $LOC = "hpc" ]]; then
-#	ssh -t -t -i ~/.ssh/auto_task_key -l "mike" -p 7389 fremont.bluezone.usu.edu "$SEQUENCE"
-#else
-#	eval $SEQUENCE
-#fi
+#Execute the sequence
+ssh -t -t -i ~/.ssh/auto_task_key $ANUM@$LOGIN "$SEQUENCE"
 
-echo $SEQUENCE
-
+echo "An email will be sent to $EMAIL when the job completes"
+echo "To get the results run the script $TASK-retrieve.sh in this folder."
+echo '#!/bin/bash' > retrieve.sh
+echo "$AT_DIR/auto_task.sh get auto_task-$NAME" >> retrieve.sh
+echo "tar xvf *.tgz" >> retrieve.sh
+echo "rm -rf *.tgz" >> retrieve.sh
+chmod +x retrieve.sh
